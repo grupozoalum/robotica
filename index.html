@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dos sistemas de coordenadas — rotaciones independientes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#16181d;
+  --paper:#eceae4;
+  --panel:#f6f5f1;
+  --line:#cfccc3;
+  --muted:#6a6862;
+  --stage:#12141a;
+  --ax-x:#e8524a;
+  --ax-y:#3fb96a;
+  --ax-z:#3f8ae0;
+  --hi:#c8a020;
+  --radius:10px;
+}
+:root:not([data-theme="light"]){
+  @media (prefers-color-scheme: dark){
+    --ink:#e9e7e1;
+    --paper:#0f1116;
+    --panel:#171a21;
+    --line:#2c313b;
+    --muted:#9a9890;
+    --stage:#0b0d11;
+  }
+}
+:root[data-theme="dark"]{
+  --ink:#e9e7e1; --paper:#0f1116; --panel:#171a21; --line:#2c313b; --muted:#9a9890; --stage:#0b0d11;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:"Space Grotesk",system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;
+  font-size:15px;
+  line-height:1.45;
+  -webkit-text-size-adjust:100%;
+}
+.wrap{max-width:1280px;margin:0 auto;padding:18px 16px 40px}
+header{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:baseline;margin-bottom:14px}
+h1{font-size:1.32rem;font-weight:700;margin:0;letter-spacing:-.01em}
+header p{margin:0;color:var(--muted);font-size:.9rem;max-width:62ch}
+.layout{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(300px,.85fr);gap:16px;align-items:start}
+@media (max-width:900px){.layout{grid-template-columns:1fr}}
+
+.stage{
+  position:relative;background:var(--stage);border:1px solid var(--line);
+  border-radius:var(--radius);overflow:hidden;
+}
+#scene{display:block;width:100%;height:min(62vh,560px);touch-action:none;cursor:grab}
+#scene.dragging{cursor:grabbing}
+.stage-note{
+  position:absolute;left:12px;bottom:10px;color:#7f8694;font-size:.74rem;
+  font-family:"IBM Plex Mono",monospace;pointer-events:none;
+}
+.stage-badge{
+  position:absolute;right:12px;top:10px;display:flex;gap:6px;pointer-events:none;
+  font-family:"IBM Plex Mono",monospace;font-size:.72rem;color:#8a91a0;
+}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
+.panel + .panel{margin-top:14px}
+.panel h2{font-size:.98rem;margin:0 0 2px;font-weight:700}
+.panel h2 .tag{font-family:"IBM Plex Mono",monospace;font-weight:400;color:var(--muted);font-size:.8rem;margin-left:6px}
+.hint{color:var(--muted);font-size:.8rem;margin:0 0 10px}
+
+.axis-row{display:grid;grid-template-columns:2.6rem 1fr 1fr 2.9rem;gap:6px;align-items:center;margin-bottom:6px}
+.axis-name{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:.95rem}
+button{
+  font:inherit;font-size:.82rem;color:var(--ink);background:transparent;
+  border:1px solid var(--line);border-radius:7px;padding:6px 4px;cursor:pointer;
+}
+button:hover{border-color:var(--muted)}
+button:focus-visible{outline:2px solid var(--hi);outline-offset:2px}
+button.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.axis-row[data-ax="x"] .axis-name{color:var(--ax-x)}
+.axis-row[data-ax="y"] .axis-name{color:var(--ax-y)}
+.axis-row[data-ax="z"] .axis-name{color:var(--ax-z)}
+.axis-row[data-ax="x"] button.on{background:var(--ax-x);border-color:var(--ax-x);color:#fff}
+.axis-row[data-ax="y"] button.on{background:var(--ax-y);border-color:var(--ax-y);color:#08210f}
+.axis-row[data-ax="z"] button.on{background:var(--ax-z);border-color:var(--ax-z);color:#fff}
+
+.speed{display:flex;align-items:center;gap:9px;margin:10px 0 8px}
+.speed label{font-size:.82rem;color:var(--muted);white-space:nowrap}
+.speed input[type=range]{flex:1;accent-color:var(--hi);min-width:80px}
+.speed output{font-family:"IBM Plex Mono",monospace;font-size:.82rem;min-width:4.2em;text-align:right}
+.row-actions{display:flex;gap:8px}
+.row-actions button{flex:1;padding:6px 8px}
+
+.mat{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:1px 4px;
+  font-family:"IBM Plex Mono",monospace;font-size:.8rem;
+  padding:8px 10px;border-left:2px solid var(--muted);border-right:2px solid var(--muted);
+  border-radius:3px;margin:6px 0 2px;
+}
+.mat span{text-align:right;font-variant-numeric:tabular-nums}
+.mat span.r4{color:var(--muted)}
+.mat-title{font-size:.8rem;color:var(--muted);margin-top:10px}
+.mat-title b{color:var(--ink);font-weight:600;font-family:"IBM Plex Mono",monospace}
+
+.opt{display:flex;align-items:flex-start;gap:8px;margin:8px 0;font-size:.85rem}
+.opt input{margin-top:3px;accent-color:var(--hi)}
+.opt span small{display:block;color:var(--muted);font-size:.76rem;line-height:1.3}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.78rem;color:var(--muted);margin-top:6px}
+.legend i{display:inline-block;width:18px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle}
+footer{margin-top:18px;color:var(--muted);font-size:.8rem;max-width:80ch}
+code{font-family:"IBM Plex Mono",monospace;font-size:.85em;background:color-mix(in srgb,var(--ink) 8%,transparent);padding:1px 4px;border-radius:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Dos sistemas de coordenadas</h1>
+  <p>Marco 0 y marco 1 empiezan alineados. Cada uno gira por separado sobre su propio eje X, Y o Z, y las matrices de abajo se actualizan mientras se mueven.</p>
+</header>
+
+<div class="layout">
+  <div>
+    <div class="stage">
+      <canvas id="scene"></canvas>
+      <div class="stage-badge"><span id="badge">en reposo</span></div>
+      <div class="stage-note">arrastra para orbitar · rueda o pellizca para acercar</div>
+    </div>
+    <div class="panel">
+      <h2>Matrices</h2>
+      <p class="hint">Matrices homogéneas 4×4: las tres primeras columnas son los ejes del marco vistos desde el mundo, la cuarta es su origen.</p>
+      <div class="mat-title"><b>T₀</b> — marco 0 respecto al mundo</div>
+      <div class="mat" id="matT0"></div>
+      <div class="mat-title"><b>T₁</b> — marco 1 respecto al mundo</div>
+      <div class="mat" id="matT1"></div>
+      <div class="mat-title"><b>⁰T₁</b> — marco 1 visto desde el marco 0 <span id="relNote"></span></div>
+      <div class="mat" id="matT01"></div>
+      <div class="legend">
+        <span><i style="background:var(--ax-x)"></i>eje X</span>
+        <span><i style="background:var(--ax-y)"></i>eje Y</span>
+        <span><i style="background:var(--ax-z)"></i>eje Z</span>
+        <span>flechas largas = marco 0 · flechas cortas = marco 1</span>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="panel" id="p0">
+      <h2>Marco 0 <span class="tag">X₀ Y₀ Z₀</span></h2>
+      <p class="hint">Gira solo este sistema. El marco 1 no se entera.</p>
+      <div class="axis-row" data-ax="x"><span class="axis-name">X₀</span><button data-f="0" data-a="x" data-d="1">girar ↻</button><button data-f="0" data-a="x" data-d="-1">girar ↺</button><button data-f="0" data-a="x" data-step="1">90°</button></div>
+      <div class="axis-row" data-ax="y"><span class="axis-name">Y₀</span><button data-f="0" data-a="y" data-d="1">girar ↻</button><button data-f="0" data-a="y" data-d="-1">girar ↺</button><button data-f="0" data-a="y" data-step="1">90°</button></div>
+      <div class="axis-row" data-ax="z"><span class="axis-name">Z₀</span><button data-f="0" data-a="z" data-d="1">girar ↻</button><button data-f="0" data-a="z" data-d="-1">girar ↺</button><button data-f="0" data-a="z" data-step="1">90°</button></div>
+      <div class="speed"><label for="sp0">Velocidad</label><input type="range" id="sp0" min="0" max="180" step="5" value="40"><output id="spo0">40 °/s</output></div>
+      <div class="row-actions"><button id="stop0">Detener</button><button id="reset0">Reiniciar marco 0</button></div>
+    </div>
+
+    <div class="panel" id="p1">
+      <h2>Marco 1 <span class="tag">X₁ Y₁ Z₁</span></h2>
+      <p class="hint">Gira solo este sistema. El marco 0 se queda quieto.</p>
+      <div class="axis-row" data-ax="x"><span class="axis-name">X₁</span><button data-f="1" data-a="x" data-d="1">girar ↻</button><button data-f="1" data-a="x" data-d="-1">girar ↺</button><button data-f="1" data-a="x" data-step="1">90°</button></div>
+      <div class="axis-row" data-ax="y"><span class="axis-name">Y₁</span><button data-f="1" data-a="y" data-d="1">girar ↻</button><button data-f="1" data-a="y" data-d="-1">girar ↺</button><button data-f="1" data-a="y" data-step="1">90°</button></div>
+      <div class="axis-row" data-ax="z"><span class="axis-name">Z₁</span><button data-f="1" data-a="z" data-d="1">girar ↻</button><button data-f="1" data-a="z" data-d="-1">girar ↺</button><button data-f="1" data-a="z" data-step="1">90°</button></div>
+      <div class="speed"><label for="sp1">Velocidad</label><input type="range" id="sp1" min="0" max="180" step="5" value="40"><output id="spo1">40 °/s</output></div>
+      <div class="row-actions"><button id="stop1">Detener</button><button id="reset1">Reiniciar marco 1</button></div>
+    </div>
+
+    <div class="panel">
+      <h2>Ajustes</h2>
+      <div class="speed"><label for="sep">Separar origen de 1</label><input type="range" id="sep" min="0" max="3" step="0.1" value="0"><output id="sepo">0.0</output></div>
+      <label class="opt"><input type="checkbox" id="intr" checked><span>Girar sobre los ejes propios<small>Activado: X₁ es el eje del marco tal como está ahora. Desactivado: gira sobre los ejes fijos del mundo.</small></span></label>
+      <label class="opt"><input type="checkbox" id="chain"><span>Encadenar 1 a 0<small>El marco 1 se vuelve hijo del 0, como dos eslabones de un robot: mover el 0 arrastra al 1.</small></span></label>
+      <label class="opt"><input type="checkbox" id="showw" checked><span>Mostrar ejes del mundo<small>Referencia fija punteada en gris.</small></span></label>
+      <div class="row-actions" style="margin-top:10px"><button id="resetAll">Reiniciar todo</button><button id="resetCam">Vista inicial</button></div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Si <code>⁰T₁</code> es la identidad, los dos marcos coinciden. Con la opción de ejes propios activada cada giro se posmultiplica (<code>R ← R·Rot(eje,θ)</code>); sin ella se premultiplica (<code>R ← Rot(eje,θ)·R</code>), que es la diferencia entre rotar sobre ejes móviles y sobre ejes fijos.
+</footer>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ---------- álgebra ---------- */
+const I3=()=>[1,0,0, 0,1,0, 0,0,1];
+function mul(A,B){const C=new Array(9);for(let r=0;r<3;r++)for(let c=0;c<3;c++){let s=0;for(let k=0;k<3;k++)s+=A[r*3+k]*B[k*3+c];C[r*3+c]=s;}return C;}
+function mv(M,v){return [M[0]*v[0]+M[1]*v[1]+M[2]*v[2], M[3]*v[0]+M[4]*v[1]+M[5]*v[2], M[6]*v[0]+M[7]*v[1]+M[8]*v[2]];}
+function T(M){return [M[0],M[3],M[6], M[1],M[4],M[7], M[2],M[5],M[8]];}
+function rot(axis,t){const c=Math.cos(t),s=Math.sin(t);
+  if(axis==='x')return [1,0,0, 0,c,-s, 0,s,c];
+  if(axis==='y')return [c,0,s, 0,1,0, -s,0,c];
+  return [c,-s,0, s,c,0, 0,0,1];}
+function ortho(M){ // Gram-Schmidt por columnas, evita deriva numérica
+  let a=[M[0],M[3],M[6]], b=[M[1],M[4],M[7]];
+  a=norm(a); b=norm(sub(b,scl(a,dot(a,b)))); const c=cross(a,b);
+  return [a[0],b[0],c[0], a[1],b[1],c[1], a[2],b[2],c[2]];
+}
+const add=(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]];
+const sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]];
+const scl=(a,k)=>[a[0]*k,a[1]*k,a[2]*k];
+const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+const norm=a=>{const n=Math.hypot(a[0],a[1],a[2])||1;return scl(a,1/n);};
+
+/* ---------- estado ---------- */
+const S={
+  R:[I3(),I3()],
+  spin:[{x:0,y:0,z:0},{x:0,y:0,z:0}],
+  speed:[40,40],
+  sep:0, intrinsic:true, chain:false, world:true,
+  cam:{az:-0.95, el:0.52, dist:9.2}
+};
+const LEN=[2.2,1.45];
+
+function frames(){
+  let R0=S.R[0], R1w, p0=[0,0,0], p1w;
+  if(S.chain){ R1w=mul(R0,S.R[1]); p1w=mv(R0,[S.sep,0,0]); }
+  else { R1w=S.R[1]; p1w=[S.sep,0,0]; }
+  return {R0,p0,R1:R1w,p1:p1w};
+}
+
+/* ---------- canvas 3D ---------- */
+const cv=document.getElementById('scene'), ctx=cv.getContext('2d');
+let W=0,H=0;
+function resize(){
+  const r=cv.getBoundingClientRect(), d=Math.min(window.devicePixelRatio||1,2);
+  W=Math.max(1,r.width); H=Math.max(1,r.height);
+  cv.width=Math.round(W*d); cv.height=Math.round(H*d);
+  ctx.setTransform(d,0,0,d,0,0);
+}
+window.addEventListener('resize',resize);
+
+let eye=[0,0,0],cr=[1,0,0],cu=[0,1,0],cf=[0,0,1],focal=600;
+function updateCam(){
+  const {az,el,dist}=S.cam;
+  eye=[dist*Math.cos(el)*Math.cos(az), dist*Math.cos(el)*Math.sin(az), dist*Math.sin(el)];
+  cf=norm(sub([0,0,0.35],eye));
+  cr=norm(cross(cf,[0,0,1]));
+  cu=cross(cr,cf);
+  focal=H/(2*Math.tan(20*Math.PI/180));
+}
+function proj(p){
+  const d=sub(p,eye), z=dot(d,cf);
+  if(z<0.15) return null;
+  const s=focal/z;
+  return {x:W/2+dot(d,cr)*s, y:H/2-dot(d,cu)*s, z};
+}
+
+const items=[], labels=[];
+function line(a,b,color,width,dash){
+  const A=proj(a),B=proj(b); if(!A||!B)return;
+  items.push({z:(A.z+B.z)/2,draw(){ctx.save();ctx.strokeStyle=color;ctx.lineWidth=width;ctx.lineCap='round';if(dash)ctx.setLineDash(dash);ctx.beginPath();ctx.moveTo(A.x,A.y);ctx.lineTo(B.x,B.y);ctx.stroke();ctx.restore();}});
+}
+function cone(tip,dir,radius,len,color){
+  const base=sub(tip,scl(dir,len));
+  const a=Math.abs(dir[2])<0.9?[0,0,1]:[1,0,0];
+  const u=norm(cross(dir,a)), v=cross(dir,u);
+  const P=[]; const N=12;
+  for(let i=0;i<N;i++){const t=i/N*2*Math.PI;P.push(proj(add(base,add(scl(u,radius*Math.cos(t)),scl(v,radius*Math.sin(t))))));}
+  const Tp=proj(tip); if(!Tp||P.some(p=>!p))return;
+  items.push({z:Tp.z,draw(){
+    ctx.save();ctx.fillStyle=color;
+    ctx.beginPath();ctx.moveTo(P[0].x,P[0].y);for(let i=1;i<N;i++)ctx.lineTo(P[i].x,P[i].y);ctx.closePath();ctx.fill();
+    for(let i=0;i<N;i++){const q=P[(i+1)%N];ctx.beginPath();ctx.moveTo(Tp.x,Tp.y);ctx.lineTo(P[i].x,P[i].y);ctx.lineTo(q.x,q.y);ctx.closePath();ctx.fill();}
+    ctx.restore();}});
+}
+function arrow(o,dir,len,color,width,text,small){
+  const tip=add(o,scl(dir,len));
+  const hl=small?0.22:0.3, hr=small?0.075:0.1;
+  line(o,add(o,scl(dir,len-hl*0.9)),color,width);
+  cone(tip,dir,hr,hl,color);
+  const P=proj(add(o,scl(dir,len+0.2)));
+  if(P)labels.push({p:P,text,color,small});
+}
+function dot3(p,color,r){const P=proj(p);if(!P)return;items.push({z:P.z-0.001,draw(){ctx.save();ctx.fillStyle=color;ctx.beginPath();ctx.arc(P.x,P.y,r,0,7);ctx.fill();ctx.restore();}});}
+
+const COL={x:'#e8524a',y:'#3fb96a',z:'#3f8ae0'};
+const COL1={x:'#ff9a94',y:'#8fe3ad',z:'#93c4f5'};
+const AX=[[1,0,0],[0,1,0],[0,0,1]];
+const KEY=['x','y','z'];
+
+function render(){
+  updateCam(); items.length=0; labels.length=0;
+  ctx.clearRect(0,0,W,H);
+  const g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#151922'); g.addColorStop(1,'#0a0c10');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+
+  for(let i=-4;i<=4;i++){
+    const c=i===0?'rgba(255,255,255,0.14)':'rgba(255,255,255,0.055)';
+    line([i,-4,0],[i,4,0],c,1); line([-4,i,0],[4,i,0],c,1);
+  }
+  const F=frames();
+  if(S.world){
+    for(let i=0;i<3;i++){
+      line([0,0,0],scl(AX[i],2.6),'rgba(190,196,208,0.42)',1.4,[5,5]);
+      const P=proj(scl(AX[i],2.85));
+      if(P)labels.push({p:P,text:['x','y','z'][i],color:'rgba(190,196,208,0.6)',small:true});
+    }
+  }
+  for(let i=0;i<3;i++) arrow(F.p0,norm(mv(F.R0,AX[i])),LEN[0],COL[KEY[i]],4.5,KEY[i].toUpperCase()+'₀',false);
+  for(let i=0;i<3;i++) arrow(F.p1,norm(mv(F.R1,AX[i])),LEN[1],COL1[KEY[i]],3,KEY[i].toUpperCase()+'₁',true);
+  dot3(F.p0,'#ffffff',4); dot3(F.p1,'#c9d2e0',3.2);
+  if(S.sep>0.01) line(F.p0,F.p1,'rgba(200,160,32,0.55)',1.5,[4,4]);
+
+  items.sort((a,b)=>b.z-a.z);
+  for(const it of items) it.draw();
+
+  ctx.save(); ctx.textAlign='center'; ctx.textBaseline='middle';
+  for(const l of labels){
+    ctx.font=(l.small?'600 12px ':'700 14px ')+'"IBM Plex Mono",monospace';
+    ctx.lineWidth=3.5; ctx.strokeStyle='rgba(8,10,14,0.85)';
+    ctx.strokeText(l.text,l.p.x,l.p.y); ctx.fillStyle=l.color; ctx.fillText(l.text,l.p.x,l.p.y);
+  }
+  ctx.restore();
+}
+
+/* ---------- matrices en pantalla ---------- */
+function build(el){const c=[];for(let i=0;i<16;i++){const s=document.createElement('span');if(i>=12)s.className='r4';el.appendChild(s);c.push(s);}return c;}
+const cells={T0:build(document.getElementById('matT0')),T1:build(document.getElementById('matT1')),T01:build(document.getElementById('matT01'))};
+function fmt(v){if(Math.abs(v)<5e-4)v=0;return v.toFixed(3);}
+function setMat(c,R,p){
+  for(let r=0;r<3;r++){for(let k=0;k<3;k++)c[r*4+k].textContent=fmt(R[r*3+k]);c[r*4+3].textContent=fmt(p[r]);}
+  c[12].textContent='0';c[13].textContent='0';c[14].textContent='0';c[15].textContent='1';
+}
+function updateMats(){
+  const F=frames();
+  setMat(cells.T0,F.R0,F.p0);
+  setMat(cells.T1,F.R1,F.p1);
+  const Rt=T(F.R0);
+  setMat(cells.T01,mul(Rt,F.R1),mv(Rt,sub(F.p1,F.p0)));
+  const act=[];
+  for(const f of [0,1])for(const a of KEY)if(S.spin[f][a])act.push(a.toUpperCase()+(f===0?'₀':'₁'));
+  document.getElementById('badge').textContent=act.length?'girando '+act.join(' + '):'en reposo';
+}
+
+/* ---------- animación ---------- */
+function apply(f,axis,ang){
+  const Rr=rot(axis,ang);
+  S.R[f]=ortho(S.intrinsic?mul(S.R[f],Rr):mul(Rr,S.R[f]));
+}
+let last=performance.now();
+function loop(now){
+  const dt=Math.min((now-last)/1000,0.05); last=now;
+  for(let f=0;f<2;f++){
+    const w=S.speed[f]*Math.PI/180;
+    for(const a of KEY){const d=S.spin[f][a];if(d)apply(f,a,d*w*dt);}
+  }
+  render(); updateMats(); requestAnimationFrame(loop);
+}
+
+/* ---------- controles ---------- */
+document.querySelectorAll('button[data-a]').forEach(b=>{
+  b.addEventListener('click',()=>{
+    const f=+b.dataset.f, a=b.dataset.a;
+    if(b.dataset.step){ apply(f,a,Math.PI/2); return; }
+    const d=+b.dataset.d;
+    S.spin[f][a]= S.spin[f][a]===d?0:d;
+    syncBtns();
+  });
+});
+function syncBtns(){
+  document.querySelectorAll('button[data-d]').forEach(b=>{
+    b.classList.toggle('on', S.spin[+b.dataset.f][b.dataset.a]===+b.dataset.d);
+  });
+}
+for(const f of [0,1]){
+  const sp=document.getElementById('sp'+f), out=document.getElementById('spo'+f);
+  sp.addEventListener('input',()=>{S.speed[f]=+sp.value;out.textContent=sp.value+' °/s';});
+  document.getElementById('stop'+f).addEventListener('click',()=>{S.spin[f]={x:0,y:0,z:0};syncBtns();});
+  document.getElementById('reset'+f).addEventListener('click',()=>{S.R[f]=I3();S.spin[f]={x:0,y:0,z:0};syncBtns();});
+}
+const sep=document.getElementById('sep'), sepo=document.getElementById('sepo');
+sep.addEventListener('input',()=>{S.sep=+sep.value;sepo.textContent=(+sep.value).toFixed(1);});
+document.getElementById('intr').addEventListener('change',e=>S.intrinsic=e.target.checked);
+document.getElementById('showw').addEventListener('change',e=>S.world=e.target.checked);
+document.getElementById('chain').addEventListener('change',e=>{
+  S.chain=e.target.checked;
+  document.getElementById('relNote').textContent=S.chain?'(marco 1 encadenado al 0)':'';
+});
+document.getElementById('resetAll').addEventListener('click',()=>{
+  S.R=[I3(),I3()]; S.spin=[{x:0,y:0,z:0},{x:0,y:0,z:0}]; syncBtns();
+});
+document.getElementById('resetCam').addEventListener('click',()=>{S.cam={az:-0.95,el:0.52,dist:9.2};});
+
+/* órbita con ratón y táctil */
+let drag=null, pinch=null;
+cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);drag={x:e.clientX,y:e.clientY};cv.classList.add('dragging');});
+cv.addEventListener('pointermove',e=>{
+  if(!drag||pinch)return;
+  S.cam.az-=(e.clientX-drag.x)*0.008;
+  S.cam.el=Math.max(-1.45,Math.min(1.45,S.cam.el+(e.clientY-drag.y)*0.008));
+  drag={x:e.clientX,y:e.clientY};
+});
+const stop=()=>{drag=null;cv.classList.remove('dragging');};
+cv.addEventListener('pointerup',stop); cv.addEventListener('pointercancel',stop);
+cv.addEventListener('wheel',e=>{e.preventDefault();S.cam.dist=Math.max(4,Math.min(22,S.cam.dist*(1+Math.sign(e.deltaY)*0.09)));},{passive:false});
+cv.addEventListener('touchstart',e=>{if(e.touches.length===2){pinch=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);}},{passive:true});
+cv.addEventListener('touchmove',e=>{
+  if(e.touches.length===2&&pinch){
+    const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+    S.cam.dist=Math.max(4,Math.min(22,S.cam.dist*pinch/d)); pinch=d; e.preventDefault();
+  }
+},{passive:false});
+cv.addEventListener('touchend',()=>{pinch=null;},{passive:true});
+
+resize(); syncBtns(); requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
